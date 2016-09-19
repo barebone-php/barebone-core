@@ -27,12 +27,12 @@ https://github.com/barebone-php/barebone-core
 
 ## Testing
 
-Install all required packages with:
-
-    $ npm install
-
 You can run tests with `phpunit` directly or use the provided grunt-task, which
 will also run tests whenever a PHP file changes.
+
+For using Grunt install all required packages with:
+
+    $ npm install
 
 The following uses scripts from packages.json and references the binaries 
 directly from '/vendor/'
@@ -40,7 +40,7 @@ directly from '/vendor/'
     $ npm start    runs phpunit and starts grunt file watcher
     $ npm test     runs phpunit
     
-Alternatives:
+### Alternatives:
 
     $ phpunit      if installed globally on your system
     $ grunt        if installed globally on your system
