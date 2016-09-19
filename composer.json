@@ -1,7 +1,7 @@
 {
   "name": "barebone/barebone-core",
   "description": "MVC Web Framework",
-  "keywords": ["framework", "mvc", "barebone"],
+  "keywords": ["framework", "mvc", "barebone-php"],
   "type": "library",
   "license": "MIT",
   "minimum-stability" : "dev",
