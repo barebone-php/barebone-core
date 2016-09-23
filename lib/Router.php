@@ -1,196 +1,279 @@
 <?php
+/**
+ * Barebone Framework
+ *
+ * PHP Version 5
+ *
+ * @category  Barebone
+ * @package   Barbone_Core
+ * @author    Kjell Bublitz <kjbbtz@gmail.com>
+ * @copyright 2016 Barebone.PHP
+ * @license   https://goo.gl/D3yaAZ MIT Licence
+ * @link      https://github.com/barebone-php/barebone-core
+ */
 namespace Barebone;
+
+use FastRoute\RouteCollector;
+use FastRoute\Dispatcher\GroupCountBased as Dispatcher;
 
 /**
  * Router
- * 
- * @example Router::get('/dashboard', '\App\Controller\Users:dashboard');
- * @example Router::post('/login', '\App\Controller\Users:login');
- * @example public function login(\Barebone\Request $request, \Barebone\Response $response, $args) {}
- * @link http://www.slimframework.com/docs/objects/router.html Documentation
- * 
- * Route callbacks can be any PHP callable, and by default it accepts three arguments.
- *	
- * - Request
- *     The first argument is a Barebone\Request object that represents the current HTTP request.
- * - Response
- *     The second argument is a Barebone\Response object that represents the current HTTP response.
- * - Arguments
- *     The third argument is an associative array that contains values for the current route’s named placeholders.
  *
+ * @category  Class
+ * @package   Barbone_Core
+ * @author    Kjell Bublitz <kjbbtz@gmail.com>
+ * @copyright 2016 Barebone.PHP
+ * @license   https://goo.gl/D3yaAZ MIT Licence
+ * @version   Release: @package_version@
+ * @link      https://github.com/barebone-php/barebone-core
+ * @since     Class available since Release 0.1.0
  */
-class Router {
-	
-	/**
-	 * @param \Slim\App
-	 */
-	private static $instance;
-	
-	/**
-	 * Instantiate Router or return $instance
-	 * @return \Slim\App
-	 */
-	public static function instance() {
-        if (null === self::$instance) {
-            $configuration = [
-                'settings' => [
-                    'displayErrorDetails' => false,
-                ],
-            ];
-            $container = new \Slim\Container($configuration);
+class Router
+{
+    const ERR_NOT_FOUND = 'route-not-found';
+    const ERR_BAD_METHOD = 'method-not-allowed';
+    const ERR_MISSING_CONTROLLER = 'missing-controller';
+    const ERR_MISSING_ACTION = 'missing-action';
 
-            $container['foundHandler'] = function ($c) {
-                return new Handler;
-            };
+    /**
+     * A container for a collection of routes
+     *
+     * @var RouteCollector
+     */
+    private static $_instance;
 
-            $container['errorHandler'] = function ($c) {
-                return function (\Slim\Http\Request $request, $response, $exception) use ($c) {
-                    $html = View::render('router/error', ['message' => $exception ? $exception->getMessage() : 'unknown error']);
-                    return $c['response']->withStatus(500)
-                        ->withHeader('Content-Type', 'text/html')
-                        ->write($html);
-                };
-            };
-
-            $container['notFoundHandler'] = function ($c) {
-                return function (\Slim\Http\Request $request, $response) use ($c) {
-                    $html = View::render('router/error404', ['url' => $request->getUri()]);
-                    return $c['response']->withStatus(404)
-                        ->withHeader('Content-Type', 'text/html')
-                        ->write($html);
-                };
-            };
-
-            $container['notAllowedHandler'] = function ($c) {
-                return function (\Slim\Http\Request $request, $response, $methods) use ($c) {
-                    $html = View::render('router/error405', ['allowed' => $methods]);
-                    return $c['response']
-                        ->withStatus(405)
-                        ->withHeader('Allow', implode(', ', $methods))
-                        ->withHeader('Content-type', 'text/html')
-                        ->write($html);
-                };
-            };
-
-            self::$instance = new \Slim\App($container);
+    /**
+     * Instantiate Router or return $instance
+     *
+     * @return RouteCollector
+     */
+    public static function instance()
+    {
+        if (null === self::$_instance) {
+            $routeCollector = new RouteCollector(
+                new \FastRoute\RouteParser\Std,
+                new \FastRoute\DataGenerator\GroupCountBased
+            );
+            self::$_instance = $routeCollector;
         }
-		return self::$instance;
-	}
-	
-	/**
-	 * Start router and parse incoming requests
-	 */
-	public static function dispatch() {
-		$router = self::instance();
-		$router->run();
-	}
+        return self::$_instance;
+    }
+
+    /**
+     * Start router and parse incoming requests
+     *
+     * @return \Zend\Diactoros\Response
+     */
+    public static function dispatch()
+    {
+        $vars = [];
+
+        $request = Request::createFromGlobals();
+
+        $dispatcher = new Dispatcher(static::instance()->getData());
+        $routeInfo = $dispatcher->dispatch(
+            $request->getMethod(),
+            $request->getUri()->getPath()
+        );
+
+        $controller = "\\Barebone\\Controller";
+        $action = "index";
+
+        switch ($routeInfo[0]) {
+        case Dispatcher::NOT_FOUND:
+            $action = 'routerError';
+            $vars['error'] = static::ERR_NOT_FOUND;
+            $vars['subject'] = $request->getUri()->getPath();
+            break;
+
+        case Dispatcher::METHOD_NOT_ALLOWED:
+            $action = 'routerError';
+            $vars['error'] = static::ERR_BAD_METHOD;
+            $vars['subject'] = $routeInfo[1];
+            break;
+
+        case Dispatcher::FOUND:
+            $handler = $routeInfo[1];
+            $vars = $routeInfo[2];
+
+            if (!class_exists($handler[0])) {
+                $action = 'routerError';
+                $vars['error'] = static::ERR_MISSING_CONTROLLER;
+                $vars['subject'] = $handler[0];
+            } elseif (!method_exists($handler[0], $handler[1])) {
+                $action = 'routerError';
+                $vars['error'] = static::ERR_MISSING_ACTION;
+                $vars['subject'] = $handler[0] . '::' . $handler[1];
+            } else {
+                $controller = $handler[0];
+                $action = $handler[1];
+            }
+            break;
+        }
+
+        // Start with an empty response
+        $response = new Response();
+        $request->setAction($action);
+
+        // @var Controller $instance
+        $instance = new $controller($request, $response);
+        $instance->initController();
+
+        // Get Middleware stacks
+        $before = $instance->getMiddlewareBefore();
+        $after = $instance->getMiddlewareAfter();
+
+        // Append the action call to the middleware stack
+        $before[] = function (Request $request, Response $response,
+            callable $next = null
+        ) use ($instance, $action, $vars) {
+
+            // assigned updated objects
+            $instance->setRequest($request);
+            $instance->setResponse($response);
+
+            // get updated response from action
+            $response = call_user_func_array([$instance, $action], $vars);
+
+            // continue
+            return $next($instance->getRequest(), $response);
+        };
+
+        // Run the middleware stack and return the Response
+        $middlewares = array_reverse(array_merge($before, $after));
+        $runner = \Sirius\Middleware\Runner::factory($middlewares);
+
+        return $runner($request, $response);
+    }
 
     /**
      * We assume to receive a string with namespace prefix (starting with backslash).
      *
-     * If the initial backslash is missing, we add our default \App\Controller namespace
-     * to allow for shorter controller callbacks.
+     * If the initial backslash is missing, we prefix \App\Controller
+     * namespace to allow for shorter controller callbacks.
      *
-     * @param mixed $callback
+     * @param mixed $callback "MyController:method" or array(class,method)
      *
-     * @return mixed string
+     * @throws \LogicException
+     * @return array
      */
-	protected static function callback($callback) {
-	    if (is_string($callback)) {
-            if ($callback{0} !== '\\') {
-                $callback = "\\App\\Controller\\{$callback}";
+    protected static function callback($callback)
+    {
+        if (is_string($callback)) {
+            // default format is "ControllerClassName:action"
+            if (strpos($callback, ':')) {
+                // automatically prefix namespace on callbacks not starting with '\'
+                if ($callback{0} !== '\\') {
+                    $callback = "\\App\\Controller\\{$callback}";
+                }
+                $callback = explode(':', $callback);
+            } else {
+                // default to "index" method in "whatever is callback class"
+                $callback = [$callback, 'index'];
             }
         }
-	    return $callback;
+        if (!is_array($callback)) {
+            throw new \LogicException(
+                "A route callback could not be understood."
+                ."Couldn't resolve to [class,action] array."
+            );
+        }
+        return $callback;
     }
-	
-	/**
-	 * Handle GET HTTP requests
-	 *
-	 * @param string $path
-	 * @param mixed $callback
-	 */
-	public static function get($path, $callback) {
-		$router = self::instance();
-		$router->get($path, self::callback($callback));
-	}
-	
-	/**
-	 * Handle POST HTTP requests
-	 *
-	 * @param string $path
-	 * @param mixed $callback
-	 */
-	public static function post($path, $callback) {
-		$router = self::instance();
-		$router->post($path, self::callback($callback));
-	}
-	
-	/**
-	 * Handle PUT HTTP requests
-	 *
-	 * @param string $path
-	 * @param mixed $callback
-	 */
-	public static function put($path, $callback) {
-		$router = self::instance();
-		$router->put($path, self::callback($callback));
-	}
-	
-	/**
-	 * Handle DELETE HTTP requests
-	 *
-	 * @param string $path
-	 * @param mixed $callback
-	 */
-	public static function delete($path, $callback) {
-		$router = self::instance();
-		$router->delete($path, self::callback($callback));
-	}
-	
-	/**
-	 * Handle PATCH HTTP requests
-	 *
-	 * @param string $path
-	 * @param mixed $callback
-	 */
-	public static function patch($path, $callback) {
-		$router = self::instance();
-		$router->patch($path, self::callback($callback));
-	}
-	
-	/**
-	 * Handle OPTIONS HTTP requests
-	 *
-	 * @param string $path
-	 * @param mixed $callback
-	 */
-	public static function options($path, $callback) {
-		$router = self::instance();
-		$router->options($path, self::callback($callback));
-	}
-	
-	/**
-	 * Route that handles all HTTP request methods
-	 *
-	 * @param string $path
-	 * @param mixed $callback
-	 */
-	public static function any($path, $callback) {
-		$router = self::instance();
-		$router->any($path, self::callback($callback));
-	}
-	
-	/**
-	 * Route that handles all HTTP request methods
-	 *
-	 * @param array $methods List of HTTP methods to support, i.e: [GET,POST,EDIT]
-	 * @param string $path 
-	 * @param mixed $callback
-	 */
-	public static function map($methods, $path, $callback) {
-		$router = self::instance();
-		$router->map($methods, $path, self::callback($callback));
-	}
-	
+
+    /**
+     * Handle GET HTTP requests
+     *
+     * @param string $path     URL segments and placeholders
+     * @param mixed  $callback "MyController:method" or array(class,method)
+     *
+     * @return void
+     */
+    public static function get($path, $callback)
+    {
+        self::instance()->addRoute('GET', $path, self::callback($callback));
+    }
+
+    /**
+     * Handle POST HTTP requests
+     *
+     * @param string $path     URL segments and placeholders
+     * @param mixed  $callback "MyController:method" or array(class,method)
+     *
+     * @return void
+     */
+    public static function post($path, $callback)
+    {
+        self::instance()->addRoute('POST', $path, self::callback($callback));
+    }
+
+    /**
+     * Handle PUT HTTP requests
+     *
+     * @param string $path     URL segments and placeholders
+     * @param mixed  $callback "MyController:method" or array(class,method)
+     *
+     * @return void
+     */
+    public static function put($path, $callback)
+    {
+        self::instance()->addRoute('PUT', $path, self::callback($callback));
+    }
+
+    /**
+     * Handle DELETE HTTP requests
+     *
+     * @param string $path     URL segments and placeholders
+     * @param mixed  $callback "MyController:method" or array(class,method)
+     *
+     * @return void
+     */
+    public static function delete($path, $callback)
+    {
+        self::instance()->addRoute('DELETE', $path, self::callback($callback));
+    }
+
+    /**
+     * Handle PATCH HTTP requests
+     *
+     * @param string $path     URL segments and placeholders
+     * @param mixed  $callback "MyController:method" or array(class,method)
+     *
+     * @return void
+     */
+    public static function patch($path, $callback)
+    {
+        self::instance()->addRoute('PATCH', $path, self::callback($callback));
+    }
+
+    /**
+     * Handle OPTIONS HTTP requests
+     *
+     * @param string $path     URL segments and placeholders
+     * @param mixed  $callback "MyController:method" or array(class,method)
+     *
+     * @return void
+     */
+    public static function options($path, $callback)
+    {
+        self::instance()->addRoute('OPTIONS', $path, self::callback($callback));
+    }
+
+    /**
+     * Route that handles all HTTP request methods
+     *
+     * @param array  $methods  List of HTTP methods to support, i.e: [GET,POST,EDIT]
+     * @param string $path     URL segments and placeholders
+     * @param mixed  $callback "MyController:method" or array(class,method)
+     *
+     * @return void
+     */
+    public static function map($methods, $path, $callback)
+    {
+        foreach ($methods as $httpMethod) {
+            self::instance()->addRoute(
+                $httpMethod, $path, self::callback($callback)
+            );
+        }
+    }
 }

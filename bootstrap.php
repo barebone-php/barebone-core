@@ -18,6 +18,10 @@ define('CORE_ROOT', PROJECT_ROOT . 'core' . DS);
 | Require Composer Autoloader
 |--------------------------------------------------------------------------
 */
+if (file_exists(__DIR__ . DS . 'vendor' . DS . 'autoload.php')) {
+    // core development (to be removed)
+    require_once __DIR__ . DS . 'vendor' . DS . 'autoload.php';
+}
 require_once PROJECT_ROOT . 'vendor' . DS . 'autoload.php';
 
 /*

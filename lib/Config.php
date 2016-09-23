@@ -1,13 +1,37 @@
 <?php
+/**
+ * Barebone Framework
+ *
+ * PHP Version 5
+ *
+ * @category  Barebone
+ * @package   Barbone_Core
+ * @author    Kjell Bublitz <kjbbtz@gmail.com>
+ * @copyright 2016 Barebone.PHP
+ * @license   https://goo.gl/D3yaAZ MIT Licence
+ * @link      https://github.com/barebone-php/barebone-core
+ */
 namespace Barebone;
 
-use \Noodlehaus\Config as ConfigLoader;
-
-class Config extends ConfigLoader
+/**
+ * Config
+ *
+ * @category  Class
+ * @package   Barbone_Core
+ * @author    Kjell Bublitz <kjbbtz@gmail.com>
+ * @copyright 2016 Barebone.PHP
+ * @license   https://goo.gl/D3yaAZ MIT Licence
+ * @version   Release: @package_version@
+ * @link      https://github.com/barebone-php/barebone-core
+ * @since     Class available since Release 0.1.0
+ */
+class Config extends \Noodlehaus\Config
 {
     /**
+     * Return Default Configuration
+     * Used if key not found within loaded file.
+     *
      * @return array
-     * @codeCoverageIgnore
      */
     protected function getDefaults()
     {
@@ -31,18 +55,20 @@ class Config extends ConfigLoader
     }
 
     /**
-     * @var \Noodlehaus\Config
+     * Configuration Interface
+     *
+     * @var Config
      */
-    private static $instance = null;
+    private static $_instance = null;
 
     /**
      * Instantiate Loader
      *
-     * @return \Noodlehaus\Config
+     * @return Config
      */
     public static function instance()
     {
-        if (null === self::$instance) {
+        if (null === self::$_instance) {
             if (!defined('APP_ROOT')) {
                 $path = __DIR__ . '/../../app/config.json';
             } else {
@@ -50,17 +76,18 @@ class Config extends ConfigLoader
             }
 
             if (!file_exists($path)) {
-                file_put_contents($path, json_encode(self::$defaults, JSON_PRETTY_PRINT));
+                $config = json_encode(self::$defaults, JSON_PRETTY_PRINT);
+                file_put_contents($path, $config);
             }
-            self::$instance = new static( $path );
+            self::$_instance = new static($path);
         }
-        return self::$instance;
+        return self::$_instance;
     }
 
     /**
      * Read configuration value
      *
-     * @param string $key     path
+     * @param string $key     Configuration-Key Path
      * @param mixed  $default Default value if key is empty/not-found
      *
      * @return mixed
@@ -79,7 +106,7 @@ class Config extends ConfigLoader
     /**
      * Check if key path exists
      *
-     * @param string $key path
+     * @param string $key Configuration-Key Path
      *
      * @return boolean
      */
@@ -87,5 +114,4 @@ class Config extends ConfigLoader
     {
         return self::instance()->has($key);
     }
-
 }
