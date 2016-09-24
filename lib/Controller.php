@@ -279,22 +279,14 @@ class Controller
     {
         $this->request = $request;
 
-        $parsedBody = $request->getParsedBody();
-
-        $contentType = null;
-        $_contentType = $this->request->getHeader('Content-Type');
-        if (!empty($_contentType)) {
-            $_contentType = explode(';', $_contentType[0]);
-            $contentType = $_contentType[0];
-        }
-
-        if (empty($parsedBody) && $contentType == 'application/json')  {
-            $input = file_get_contents("php://input");
-            $parsedBody = json_decode($input, true);
-        }
+        $parsedBody = $this->request->getParsedBody();
 
         if (!empty($parsedBody)) {
-            $this->data = array_map('trim', (array)$parsedBody);
+            if (is_array($parsedBody)) {
+                $this->data = array_map('trim', (array)$parsedBody);
+            } else {
+                $this->data = $parsedBody;
+            }
         }
 
         return $this;
