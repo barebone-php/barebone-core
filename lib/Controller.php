@@ -52,6 +52,14 @@ class Controller
     protected $config;
 
     /**
+     * Request data parsed from body
+     * $_POST
+     *
+     * @var array|null
+     */
+    protected $data = null;
+
+    /**
      * Middleware callbacks
      *
      * @var array
@@ -270,6 +278,10 @@ class Controller
     public function setRequest(Request $request)
     {
         $this->request = $request;
+
+        if ($parsedBody = $request->getParsedBody()) {
+            $this->data = array_map('trim', (array)$parsedBody);
+        }
 
         return $this;
     }
