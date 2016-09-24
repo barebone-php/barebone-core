@@ -123,4 +123,38 @@ class Request extends ServerRequest
 
         return $this;
     }
+
+    /**
+     * Get primary content-type header without encoding info
+     *
+     * @return string|null
+     */
+    public function getContentType()
+    {
+        $contentType = null;
+        $_contentType = $this->getHeader('Content-Type');
+        if (!empty($_contentType)) {
+            $_contentType = explode(';', $_contentType[0]);
+            $contentType = $_contentType[0];
+        }
+
+        return $contentType;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function getParsedBody()
+    {
+        $parsedBody = parent::getParsedBody();
+
+        if (empty($parsedBody))  {
+            if ($this->getContentType() == 'application/json')  {
+                $input = file_get_contents("php://input");
+                $parsedBody = json_decode($input, true);
+            }
+        }
+
+        return $parsedBody;
+    }
 }
